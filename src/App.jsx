@@ -35,6 +35,33 @@ const SHOP_CATEGORIES = {
 const LUCKY_COLORS = ["ラベンダー", "ローズゴールド", "エメラルドグリーン", "サンセットオレンジ", "ミッドナイトブルー", "シルバーグレー", "コーラルピンク", "ターコイズ", "バーガンディ", "クリーム", "チャコール", "ライトイエロー"];
 const LUCKY_NUMBERS = [3, 5, 7, 8, 11, 12, 15, 17, 21, 22, 24, 28];
 
+const DOG_BREEDS = [
+  { name: "柴犬", emoji: "🐕" },
+  { name: "秋田犬", emoji: "🐕" },
+  { name: "トイプードル", emoji: "🐩" },
+  { name: "スタンダードプードル", emoji: "🐩" },
+  { name: "ゴールデンレトリーバー", emoji: "🦮" },
+  { name: "ラブラドールレトリーバー", emoji: "🦮" },
+  { name: "チワワ", emoji: "🐕" },
+  { name: "ダックスフンド", emoji: "🐕" },
+  { name: "コーギー", emoji: "🐕" },
+  { name: "ポメラニアン", emoji: "🐕" },
+  { name: "フレンチブルドッグ", emoji: "🐕" },
+  { name: "パグ", emoji: "🐕" },
+  { name: "ミニチュアシュナウザー", emoji: "🐕" },
+  { name: "ビーグル", emoji: "🐕‍🦺" },
+  { name: "ボーダーコリー", emoji: "🐕‍🦺" },
+  { name: "シベリアンハスキー", emoji: "🐕‍🦺" },
+  { name: "マルチーズ", emoji: "🐕" },
+  { name: "ヨークシャーテリア", emoji: "🐕" },
+  { name: "シーズー", emoji: "🐕" },
+  { name: "パピヨン", emoji: "🐕" },
+  { name: "ビション・フリーゼ", emoji: "🐩" },
+  { name: "ミニチュアピンシャー", emoji: "🐕" },
+  { name: "イタリアングレーハウンド", emoji: "🐕" },
+  { name: "サモエド", emoji: "🐕‍🦺" },
+];
+
 function StarRating({ score }) {
   return (
     <div style={{ display: "flex", gap: "3px" }}>
@@ -96,19 +123,19 @@ export default function App() {
     healthScore: ((i * 5 + m * 2) % 5) + 1,
   });
 
-  const buildPrompt = (sign, m, y) => `
+  const getDogBreed = (i, m) => DOG_BREEDS[(i + m) % DOG_BREEDS.length];
+
+  const buildPrompt = (sign, m, y, breed) => `
 あなたはペット占い師です。${y}年${m}月の${sign.name}（${sign.en}）の飼い主・愛犬向け月間占いを書いてください。
 
 ルール：
-- 犬の種類に例えて今月の運勢を表現する
+- 今月のテーマ犬種は「${breed.name}」に固定します。この犬種の特徴に例えて今月の運勢を表現する（他の犬種名は出さない）
 - ショップ誘導文を自然に1〜2箇所組み込む（押しつけがましくなく）
 - ショップ名は「Atelier ToYou」
 
 以下のJSON形式のみで返してください（余分なテキスト・Markdownなし）：
 {
-  "dogBreed": "犬の種類名（例：柴犬、ゴールデンレトリーバーなど）",
-  "dogEmoji": "犬の絵文字（🐕🐩🦮🐕‍🦺など）",
-  "tagline": "今月のキャッチコピー（25文字以内、犬の例えを含む）",
+  "tagline": "今月のキャッチコピー（25文字以内、${breed.name}の例えを含む）",
   "overall": "総合運（180字程度。犬の特徴を活かした運勢。末尾にさりげなくAtelier ToYouへの誘導を1文入れる）",
   "love": "恋愛運（80字程度）",
   "work": "仕事運（80字程度）",
@@ -122,6 +149,7 @@ export default function App() {
   const fetchHoroscope = async (i) => {
     const sign = ZODIAC_SIGNS[i];
     const lucky = getLucky(i, currentMonth);
+    const breed = getDogBreed(i, currentMonth);
     setLoading(true);
     setError(null);
     try {
@@ -131,46 +159,19 @@ export default function App() {
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 1000,
-          messages: [{ role: "user", content: buildPrompt(sign, currentMonth, currentYear) }],
+          messages: [{ role: "user", content: buildPrompt(sign, currentMonth, currentYear, breed) }],
         }),
       });
       const data = await res.json();
       const text = data.content.map(b => b.text || "").join("");
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
       const shopUrl = SHOP_CATEGORIES[parsed.shopCategoryHint] || SHOP_CATEGORIES.dogs;
-      setHoroscopes(prev => ({ ...prev, [i]: { ...parsed, lucky, shopUrl } }));
+      setHoroscopes(prev => ({ ...prev, [i]: { ...parsed, dogBreed: breed.name, dogEmoji: breed.emoji, lucky, shopUrl } }));
     } catch {
       setError("占いの生成に失敗しました。もう一度お試しください。");
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateAll = async () => {
-    setGenerating(true);
-    setError(null);
-    for (let i = 0; i < ZODIAC_SIGNS.length; i++) {
-      const sign = ZODIAC_SIGNS[i];
-      const lucky = getLucky(i, currentMonth);
-      try {
-        const res = await fetch("/api/proxy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-6",
-            max_tokens: 1000,
-            messages: [{ role: "user", content: buildPrompt(sign, currentMonth, currentYear) }],
-          }),
-        });
-        const data = await res.json();
-        const text = data.content.map(b => b.text || "").join("");
-        const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-        const shopUrl = SHOP_CATEGORIES[parsed.shopCategoryHint] || SHOP_CATEGORIES.dogs;
-        setHoroscopes(prev => ({ ...prev, [i]: { ...parsed, lucky, shopUrl } }));
-      } catch { /* skip */ }
-      await new Promise(r => setTimeout(r, 500));
-    }
-    setGenerating(false);
   };
 
   const d = selected !== null ? horoscopes[selected] : null;
@@ -207,19 +208,6 @@ export default function App() {
           {currentYear}年{currentMonth}月 ✦ あなたと愛犬の今月の運勢
         </p>
         <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
-          <button
-            onClick={generateAll}
-            disabled={generating}
-            style={{
-              background: generating ? "rgba(120,40,200,0.3)" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
-              border: "none", borderRadius: "50px", padding: "12px 28px",
-              color: "white", fontSize: "14px", fontWeight: "700",
-              cursor: generating ? "not-allowed" : "pointer",
-              boxShadow: generating ? "none" : "0 4px 18px rgba(124,58,237,0.45)",
-            }}
-          >
-            {generating ? "✨ 占い中..." : "✨ 全星座をまとめて占う"}
-          </button>
           <a
             href={SHOP_CATEGORIES.top}
             target="_blank"
